@@ -5,9 +5,9 @@
 
 using CppAD::AD;
 
-double ref_v = 120.0;
-double dt = fmax(1/ref_v, 1.0*(100*1E-3)); // ; // Just matching latency units
+double ref_v = 125.0*0.44704;
 const double Lf = 2.67;
+double dt = 1.5*fmax(Lf/ref_v, 1.0*(100*1E-3)); 
 size_t N = 10;
 
 
@@ -51,22 +51,23 @@ class FG_eval {
         for (t = 0; t < N; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
             fg[0] += 1*CppAD::pow(vars[idxs[3] + t] - ref_v, 2);
-            fg[0] += 1000*CppAD::pow(vars[idxs[4] + t], 4);
-            fg[0] += 1000*CppAD::pow(vars[idxs[5] + t], 2);
+            fg[0] += 50*CppAD::pow(vars[idxs[4] + t], 2);
+            fg[0] += 10000*CppAD::pow(vars[idxs[5] + t], 2);
+
         }
         
         // Penalize high actuations to avoid saturation
         for (t = 0; t < N - 1; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
-            fg[0] += 100*CppAD::pow(vars[idxs[6] + t], 2);
-            fg[0] += 1*CppAD::pow(vars[idxs[7] + t], 2);
+            fg[0] += 500*CppAD::pow(vars[idxs[6] + t], 2);
+            fg[0] += 25*CppAD::pow(vars[idxs[7] + t], 2);
         }
         
         // Penalize discontinuity
         for (t = 0; t < N - 2; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
-            fg[0] += 10*CppAD::pow(vars[idxs[6] + t + 1] - vars[idxs[6] + t], 2);
-            fg[0] += 1*CppAD::pow(vars[idxs[7] + t + 1] - vars[idxs[7] + t], 2);
+            fg[0] += 2000*CppAD::pow(vars[idxs[6] + t + 1] - vars[idxs[6] + t], 2);
+            fg[0] += 25*CppAD::pow(vars[idxs[7] + t + 1] - vars[idxs[7] + t], 2);
         }
         
         // ----------------------------------------

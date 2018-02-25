@@ -11,6 +11,9 @@
 
 using Eigen::VectorXd;
 
+const int latency = 100;
+const double Lf = 2.67;
+
 // for convenience
 using json = nlohmann::json;
 
@@ -93,6 +96,8 @@ int main() {
                     double py = j[1]["y"];
                     double psi = j[1]["psi"];
                     double v = j[1]["speed"];
+                    double steer_value = j[1]["steering_angle"];
+                    double throttle_value = j[1]["throttle"];
                     
                     VectorXd wpts_x = VectorXd::Constant(ptsx.size(), 0.0);
                     VectorXd wpts_y = VectorXd::Constant(ptsy.size(), 0.0);
@@ -106,17 +111,24 @@ int main() {
                     }
                     
                     // Trajectory polynomial and tracking errors
-                    auto coeffs = polyfit(wpts_x, wpts_y, 2);
+                    auto coeffs = polyfit(wpts_x, wpts_y, 3);
                     
-                    double cte  = polyeval(coeffs, 0); // polyeval(coeffs, px) - py;
-                    double epsi = - atan(coeffs[1]); // epsi = psi - atan(coeffs[1]);
+                    double dt = double(latency)/1000;
+                    steer_value *= -1.0; // Coordinate transformation
+                    v *= 0.44704; // Converting to m/s
+                    px  = dt*v*cos(steer_value);
+                    py  = dt*v*sin(steer_value);
+                    psi = dt*v/Lf*sin(steer_value);
+                    
+                    double cte  = polyeval(coeffs, px) - py;
+                    double epsi = psi - atan(coeffs[1]);
+                    v+= throttle_value*dt;
+                    
                     
                     // Create the state vector
                     VectorXd state = VectorXd::Constant(6, 0.0);
-                    state << 0, 0, 0, v, cte, epsi;
-
-                    double steer_value;
-                    double throttle_value;
+                    
+                    state << px, py, psi, v, cte, epsi;
                     
                     /*
                         NOTE : 
@@ -167,17 +179,8 @@ int main() {
                     msgJson["next_y"] = next_y_vals;
                     
                     auto msg = "42[\"steer\"," + msgJson.dump() + "]";
-                    //std::cout << msg << std::endl;
-                    // Latency
-                    // The purpose is to mimic real driving conditions where
-                    // the car does actuate the commands instantly.
-                    //
-                    // Feel free to play around with this value but should be to drive
-                    // around the track with 100ms latency.
-                    //
-                    // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
-                    // SUBMITTING.
-                    this_thread::sleep_for(chrono::milliseconds(000));
+
+                    this_thread::sleep_for(chrono::milliseconds(latency));
                     ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
                 }
                 } else {
