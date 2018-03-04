@@ -2,6 +2,7 @@
 #include <uWS/uWS.h>
 #include <chrono>
 #include <iostream>
+#include <fstream>
 #include <thread>
 #include <vector>
 #include "Eigen-3.3/Eigen/Core"
@@ -73,8 +74,22 @@ int order) {
 int main() {
     uWS::Hub h;
     
+    std::ifstream fparam("../src/param.json");
+    json mpc_param;
+    fparam >> mpc_param;
+    
     // MPC is initialized here!
-    MPC mpc;
+    MPC mpc(mpc_param["Constants"]["v_ref"] , mpc_param["Constants"]["Lf"], mpc_param["Constants"]["N"], double(latency));
+    
+    vector<double> weights;
+    weights.push_back(mpc_param["Weights"]["wv"]);
+    weights.push_back(mpc_param["Weights"]["wcte"]);
+    weights.push_back(mpc_param["Weights"]["wepsi"]);
+    weights.push_back(mpc_param["Weights"]["wdelta"]);
+    weights.push_back(mpc_param["Weights"]["wa"]);
+    weights.push_back(mpc_param["Weights"]["wjump_delta"]);
+    weights.push_back(mpc_param["Weights"]["wjump_a"]);
+    mpc.set_weights(weights);
     
     h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
     uWS::OpCode opCode) {

@@ -1,0 +1,14 @@
+{"Weights" : { 
+        "wv":         7.5,
+      "wcte":        12.5,
+      "wepsi":       15.0,
+      "wdelta":      10.0,
+      "wa":           5.0,
+      "wjump_delta": 30.0,
+      "wjump_a":     20.0},
+ "Constants" : {
+      "v_ref" : 105,
+      "Lf": 2.67,
+      "N" : 10,
+      "latency": 100}
+ }

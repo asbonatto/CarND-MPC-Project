@@ -5,12 +5,6 @@
 
 using CppAD::AD;
 
-double ref_v = 125.0*0.44704;
-const double Lf = 2.67;
-double dt = 1.5*fmax(Lf/ref_v, 1.0*(100*1E-3)); 
-size_t N = 10;
-
-
 vector<size_t> get_idxs(int state_size, int control_size, int N){
     // Auxiliary function to get the indices
     
@@ -34,8 +28,20 @@ class FG_eval {
     public:
     // Fitted polynomial coefficients
     Eigen::VectorXd coeffs;
-    FG_eval(Eigen::VectorXd coeffs) {
+    double v_ref, dt, Lf, a_ref;
+    size_t N;
+    vector<double> weights;
+    
+    FG_eval(Eigen::VectorXd coeffs, vector<double> weights, double v_ref, double dt, size_t N, double Lf, double a_ref) {
+        
+        this->weights = weights;
         this->coeffs = coeffs; 
+        this->v_ref = v_ref; 
+        this->dt = dt; 
+        this->N = N; 
+        this->Lf = Lf; 
+        this->a_ref = a_ref; 
+
     }
     
     typedef CPPAD_TESTVECTOR(AD<double>) ADvector;
@@ -50,24 +56,24 @@ class FG_eval {
         // Cost part related to the reference trajectory
         for (t = 0; t < N; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
-            fg[0] += 1*CppAD::pow(vars[idxs[3] + t] - ref_v, 2);
-            fg[0] += 50*CppAD::pow(vars[idxs[4] + t], 2);
-            fg[0] += 10000*CppAD::pow(vars[idxs[5] + t], 2);
+            fg[0] += weights[0]*CppAD::pow(vars[idxs[3] + t]/v_ref - 1, 2);
+            fg[0] += weights[1]*CppAD::pow(vars[idxs[4] + t]/Lf, 2);
+            fg[0] += weights[2]*CppAD::pow(vars[idxs[5] + t], 2);
 
         }
         
         // Penalize high actuations to avoid saturation
         for (t = 0; t < N - 1; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
-            fg[0] += 500*CppAD::pow(vars[idxs[6] + t], 2);
-            fg[0] += 25*CppAD::pow(vars[idxs[7] + t], 2);
+            fg[0] += weights[3]*CppAD::pow(vars[idxs[6] + t], 2);
+            fg[0] += weights[4]*CppAD::pow(vars[idxs[7] + t]/a_ref, 2);
         }
         
         // Penalize discontinuity
         for (t = 0; t < N - 2; t++) {
             // Remember that state is  x, y, psi, v, cte, epsi, d, a
-            fg[0] += 2000*CppAD::pow(vars[idxs[6] + t + 1] - vars[idxs[6] + t], 2);
-            fg[0] += 25*CppAD::pow(vars[idxs[7] + t + 1] - vars[idxs[7] + t], 2);
+            fg[0] += weights[5]*CppAD::pow(vars[idxs[6] + t + 1] - vars[idxs[6] + t], 2);
+            fg[0] += weights[6]*CppAD::pow(vars[idxs[7] + t + 1]/a_ref - vars[idxs[7] + t]/a_ref, 2);
         }
         
         // ----------------------------------------
@@ -129,7 +135,40 @@ class FG_eval {
 //
 // MPC class definition implementation.
 //
-MPC::MPC() {}
+MPC::MPC(double v_ref, double Lf, size_t N, double latency) {
+    
+    v_ref *= 0.44704;
+    this->v_ref = v_ref;
+    this->Lf = Lf;
+    this->N = N;
+    this->dt = fmax(1E-3*latency*1.5, Lf/v_ref);
+    this->a_ref = v_ref*v_ref/Lf;
+    
+    std::cout << endl << "#-----------------" << endl;
+    std::cout << "MPC targets "<<  endl;
+    std::cout << "Speed(mph), dt(s), N : " << this->v_ref/0.44704 << ", " << this->dt << ", " << this->N << endl;
+    
+}
+void MPC::set_weights(vector<double> weights) {
+    
+    double norm = 0;
+    for (size_t w = 0; w < weights.size(); w++){
+        norm += weights[w];
+    }
+    
+    for (size_t w = 0; w < weights.size(); w++){
+        weights[w] /=norm;
+    }
+    
+    this->weights = weights;
+    
+    std::cout << "MPC normalized weights : ";
+    for (size_t w = 0; w < weights.size(); w++){
+        std::cout << this->weights[w] << " ";
+    }
+    std::cout << endl << "#-----------------" << endl;
+}
+
 MPC::~MPC() {}
 
 vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
@@ -189,7 +228,7 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
     }
     
     // object that computes objective and constraints
-    FG_eval fg_eval(coeffs); // ref_v, N
+    FG_eval fg_eval(coeffs, weights, v_ref, dt, N, Lf, a_ref);
     
     // options for IPOPT solver
     std::string options;
